@@ -31,17 +31,19 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ffmpeg curl
 
       - name: Resource allocation
+        env:
+          DROPBOX_URL: ${{ secrets.YT_WOTL_KEY }} # Tvoj Secret s linkom
         run: |
           set +e
           rm -f video.mp4 || true
-          URL="https://www.dropbox.com/scl/fi/fmu96nc0hlmh3vz0v8cxu/wotldaily.mp4?rlkey=0fwtwxzn597kvjab8i7a614u3&st=217qa7na&raw=1"
-          curl -L "$URL" -o "video.mp4"
-          if [ ! -s "video.mp4" ]; then exit 1; fi
+          # Použijeme link zo Secret premennej
+          curl -L "$DROPBOX_URL" -o "video.mp4"
+          if [ ! -s "video.mp4" ]; then echo "Download failed!"; exit 1; fi
           set -e
 
       - name: Transmission start
         env:
-          TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY_2 }}
+          TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY_3 }} # Tvoj Secret pre YouTube
         run: |
           ffmpeg -nostdin -re -stream_loop -1 -i video.mp4 \
           -map 0:v:0 -map 0:a:0 \
