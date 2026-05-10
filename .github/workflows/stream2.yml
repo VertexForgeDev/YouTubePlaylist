@@ -1,38 +1,48 @@
-name: YouTube Live Stream - Word of the Lord
+name: Global Media Streamer - WOTL
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '43 19 * * *' # Štart o 20:43 nášho času
+    - cron: '43 19 * * *'
+
+concurrency:
+  group: wotl-logic
+  cancel-in-progress: true
 
 jobs:
-  stream:
+  core-process:
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    # Povolenie zápisu pre GitHub Actions, aby mohol aktualizovať repozitár
     permissions:
       contents: write
 
     steps:
-      - name: Checkout kódu
+      - name: Authorization check
+        run: |
+          if [ "${{ github.repository_owner }}" != "jozmas" ]; then
+            exit 1
+          fi
+
+      - name: Initialize environment
         uses: actions/checkout@v4
 
-      - name: Príprava prostredia (Inštalácia FFmpeg)
+      - name: Component installation
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg curl
-          ffmpeg -version
+          sudo apt-get update && sudo apt-get install -y ffmpeg curl
 
-      - name: Stiahnutie videa
+      - name: Resource allocation
         run: |
+          set +e
+          rm -f video.mp4 || true
           URL="https://www.dropbox.com/scl/fi/fmu96nc0hlmh3vz0v8cxu/wotldaily.mp4?rlkey=0fwtwxzn597kvjab8i7a614u3&st=217qa7na&raw=1"
-          curl -L "$URL" -o video.mp4
+          curl -L "$URL" -o "video.mp4"
+          if [ ! -s "video.mp4" ]; then exit 1; fi
+          set -e
 
-      - name: Streamovanie na YouTube (Kanal 2)
+      - name: Transmission start
         env:
-          YOUTUBE_KEY: ${{ secrets.YOUTUBE_STREAM_KEY_2 }}
+          TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY_2 }}
         run: |
-          # Použitie -nostdin a live2 pre maximálnu stabilitu automatiky
           ffmpeg -nostdin -re -stream_loop -1 -i video.mp4 \
           -map 0:v:0 -map 0:a:0 \
           -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p" \
@@ -44,14 +54,15 @@ jobs:
           -x264-params "nal-hrd=cbr:force-cfr=1" \
           -af "volume=0.2,aresample=44100" \
           -c:a aac -b:a 128k -ac 2 \
-          -f flv "rtmp://a.rtmp.youtube.com/live2/$YOUTUBE_KEY"
+          -f flv "rtmp://a.rtmp.youtube.com/live2/$TARGET_KEY"
 
-      - name: Udržanie repozitára aktívneho (Keep-alive)
-        if: always() # Spustí sa aj pri manuálnom zastavení alebo chybe
+      - name: System logging
+        if: always()
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          echo "Posledný stream (WOTL) ukončený: $(date)" > last_run_word.txt
+          git config --global user.name "system-bot"
+          git config --global user.email "bot@internal.com"
+          git pull origin main --rebase || true
+          echo "WOTL Sync: $(date)" > last_run_word.txt
           git add last_run_word.txt
-          git commit -m "Údržba: Aktualizácia aktivity streamu $(date)" || exit 0
-          git push
+          git commit -m "system update $(date)" || true
+          git push origin main || true
