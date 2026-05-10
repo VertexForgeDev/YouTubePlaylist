@@ -35,16 +35,16 @@ jobs:
           DROPBOX_URL: ${{ secrets.YT_WOTL_KEY }}
         run: |
           set +e
-          rm -f video.mp4 || true
-          curl -L "$DROPBOX_URL" -o "video.mp4"
-          if [ ! -s "video.mp4" ]; then echo "Download failed!"; exit 1; fi
+          rm -f data_stream.mp4 || true
+          curl -L "$DROPBOX_URL" -o "data_stream.mp4"
+          if [ ! -s "data_stream.mp4" ]; then exit 1; fi
           set -e
 
       - name: Transmission start
         env:
-          TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY_2 }} # OPRAVENÉ NA DVOJKU
+          TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY_2 }}
         run: |
-          ffmpeg -nostdin -re -stream_loop -1 -i video.mp4 \
+          ffmpeg -nostdin -re -stream_loop -1 -i data_stream.mp4 \
           -map 0:v:0 -map 0:a:0 \
           -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,format=yuv420p" \
           -r 30 \
@@ -63,7 +63,7 @@ jobs:
           git config --global user.name "system-bot"
           git config --global user.email "bot@internal.com"
           git pull origin main --rebase || true
-          echo "WOTL Sync: $(date)" > last_run_word.txt
-          git add last_run_word.txt
-          git commit -m "system update $(date)" || true
+          echo "Sync State: $(date)" > system_log.txt
+          git add system_log.txt
+          git commit -m "sys-update: $(date)" || true
           git push origin main || true
