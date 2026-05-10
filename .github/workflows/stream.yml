@@ -25,36 +25,24 @@ jobs:
           if [ "${{ github.repository_owner }}" != "jozmas" ]; then
             exit 1
           fi
-
       - name: Initialize environment
         uses: actions/checkout@v4
-
       - name: Component installation
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-
       - name: Resource allocation
         env:
           DB_SOURCE: ${{ secrets.VIDEO_URLS }}
         run: |
-          # The -f flag prevents error if no mp4 files exist
           rm -f *.mp4 || true
-          
-          # Convert secret into array safely
           IFS=$'\n' read -rd '' -a VIDEOS <<< "$DB_SOURCE"
-          
           COUNT=${#VIDEOS[@]}
           SEED=$(($(date +%s%N) + RANDOM))
           INDEX=$(( SEED % COUNT ))
           SELECTED_URL=${VIDEOS[$INDEX]}
-          
-          # Internal asset naming
           curl -L "$SELECTED_URL" -o "video_na_stream.mp4"
-          
-          du -sh video_na_stream.mp4
           echo "LAST_IDX=$INDEX" >> $GITHUB_ENV
-
       - name: Transmission start
         env:
           TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
@@ -65,7 +53,6 @@ jobs:
           -pix_fmt yuv420p -g 60 -r 30 \
           -c:a aac -b:a 128k -ar 44100 \
           -f flv "rtmp://a.rtmp.youtube.com/live2/$TARGET_KEY"
-
       - name: System logging
         if: always()
         run: |
@@ -75,5 +62,5 @@ jobs:
           echo "Sync: $(date)" > status.log
           echo "Active Index: ${{ env.LAST_IDX }}" >> status.log
           git add status.log
-          git commit -m "System state update $(date)" || exit 0
+          git commit -m "update $(date)" || true
           git push origin main || true
