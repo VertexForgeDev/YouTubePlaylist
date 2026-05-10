@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Authorization check
         run: |
-          if [ "${{ github.repository_owner }}" != "TVOJE_PRIHLASOVACIE_MENO" ]; then
+          if [ "${{ github.repository_owner }}" != "jozmas" ]; then
             echo "Security breach detected. Unauthorized repository owner."
             exit 1
           fi
