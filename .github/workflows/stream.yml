@@ -1,84 +1,82 @@
-name: YouTube Live 24/7 - Nature Mix
+name: Global Media Streamer
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '10 0 * * *'  # 02:10 ráno
-    - cron: '40 5 * * *'  # 07:40 ráno
-    - cron: '20 11 * * *' # 13:20 poobede
-    - cron: '40 17 * * *' # 19:40 večer
+    - cron: '10 0 * * *'
+    - cron: '40 5 * * *'
+    - cron: '20 11 * * *'
+    - cron: '40 17 * * *'
 
-# Toto zabezpečí, že bežiaci stream sa vypne, keď má začať nový plánovaný čas
 concurrency:
-  group: youtube-live
+  group: streamer-logic
   cancel-in-progress: true
 
 jobs:
-  stream:
+  core-process:
     runs-on: ubuntu-latest
-    timeout-minutes: 340  # 5 hodín a 40 minút
+    timeout-minutes: 340
     permissions:
       contents: write
 
     steps:
-      - name: Checkout kódu
+      - name: Authorization check
+        run: |
+          if [ "${{ github.repository_owner }}" != "TVOJE_PRIHLASOVACIE_MENO" ]; then
+            echo "Security breach detected. Unauthorized repository owner."
+            exit 1
+          fi
+
+      - name: Initialize environment
         uses: actions/checkout@v4
 
-      - name: Inštalácia FFmpeg
+      - name: Component installation
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
 
-      - name: VÝBER VIDEA A KONTROLA
+      - name: Resource allocation
+        env:
+          DB_SOURCE: ${{ secrets.VIDEO_URLS }}
         run: |
           rm -rf *.mp4
           
-          VIDEOS=(
-            "https://www.dropbox.com/scl/fi/t8v82zwuj5oompgrb8voz/waterfall.mp4?rlkey=zo14mr99pihkc1px6b5o0dtl5&raw=1"
-            "https://www.dropbox.com/scl/fi/kp8qyithsqs2nfonpp1gk/waterfall-stream.mp4?rlkey=caaon46glrb6amltbq8apdlr0&raw=1"
-            "https://www.dropbox.com/scl/fi/yh84vqdx3ru1z8gbtet71/stream.mp4?rlkey=yfmjsn2j4wfp0o6q3c83bjbbh&raw=1"
-            "https://www.dropbox.com/scl/fi/41dgp7s1to0ecavdwbhqv/cave.mp4?rlkey=g4oks0ycbejg2h2pnvjg2uymy&raw=1"
-            "https://www.dropbox.com/scl/fi/lgyuy8ybd8ug85p5umopl/summer-fire-and-crickets.mp4?rlkey=5531ok1c74hmowxej0cwjhdsi&raw=1"
-          )
+          # Convert secret string to array
+          IFS=$'\n' read -rd '' -a VIDEOS <<< "$DB_SOURCE"
           
           COUNT=${#VIDEOS[@]}
           SEED=$(($(date +%s%N) + RANDOM))
           INDEX=$(( SEED % COUNT ))
           SELECTED_URL=${VIDEOS[$INDEX]}
           
-          FILENAME=$(echo "$SELECTED_URL" | sed -n 's|.*/\([^?]*\).*|\1|p')
+          echo "Selected resource index: $INDEX"
           
-          echo "==========================================="
-          echo "🎬 ŠTARTUJEM NOVÝ BLOK"
-          echo "🔢 VYBRANÝ INDEX: $INDEX (celkovo videí: $COUNT)"
-          echo "🎥 SŤAHUJEM SÚBOR: $FILENAME"
-          echo "==========================================="
+          # Secure download
+          curl -L "$SELECTED_URL" -o "media_asset.mp4"
           
-          curl -L "$SELECTED_URL" -o "video_na_stream.mp4"
-          
-          echo "✅ SÚBOR STIAHNUTÝ. VEĽKOSŤ:"
-          du -sh video_na_stream.mp4
-          echo "LAST_INDEX=$INDEX" >> $GITHUB_ENV
+          echo "Asset size:"
+          du -sh media_asset.mp4
+          echo "LAST_IDX=$INDEX" >> $GITHUB_ENV
 
-      - name: Streamovanie na YouTube
+      - name: Transmission start
         env:
-          YOUTUBE_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
+          TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
         run: |
-          ffmpeg -re -stream_loop -1 -i video_na_stream.mp4 \
+          ffmpeg -re -stream_loop -1 -i media_asset.mp4 \
           -c:v libx264 -preset veryfast -tune film \
           -b:v 4500k -maxrate 5000k -bufsize 10000k \
           -pix_fmt yuv420p -g 60 -r 30 \
           -c:a aac -b:a 128k -ar 44100 \
-          -f flv "rtmp://a.rtmp.youtube.com/live2/$YOUTUBE_KEY"
+          -f flv "rtmp://a.rtmp.youtube.com/live2/$TARGET_KEY"
 
-      - name: Keep-alive (Zápis do logu)
+      - name: System logging
         if: always()
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "system-bot"
+          git config --global user.email "bot@internal.com"
           git pull origin main --rebase
-          echo "Posledný reštart streamu: $(date)" > last_run.txt
-          echo "Hralo sa video index: ${{ env.LAST_INDEX }}" >> last_run.txt
-          git add last_run.txt
-          git commit -m "Log update $(date)" || exit 0
+          echo "Sync: $(date)" > status.log
+          echo "Active Index: ${{ env.LAST_IDX }}" >> status.log
+          git add status.log
+          git commit -m "System state update $(date)" || exit 0
           git push origin main
