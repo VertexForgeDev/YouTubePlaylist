@@ -23,7 +23,6 @@ jobs:
       - name: Authorization check
         run: |
           if [ "${{ github.repository_owner }}" != "jozmas" ]; then
-            echo "Security breach detected. Unauthorized repository owner."
             exit 1
           fi
 
@@ -39,31 +38,19 @@ jobs:
         env:
           DB_SOURCE: ${{ secrets.VIDEO_URLS }}
         run: |
-          # Use -f to ignore errors if files don't exist and prevent workflow failure
-          rm -rf *.mp4 || true
-          
-          # Convert secret string to array
+          rm -f *.mp4 || true
           IFS=$'\n' read -rd '' -a VIDEOS <<< "$DB_SOURCE"
-          
           COUNT=${#VIDEOS[@]}
           SEED=$(($(date +%s%N) + RANDOM))
           INDEX=$(( SEED % COUNT ))
           SELECTED_URL=${VIDEOS[$INDEX]}
-          
-          echo "Selected resource index: $INDEX"
-          
-          # Secure download with retry logic
           curl -L "$SELECTED_URL" -o "media_asset.mp4"
-          
-          echo "Asset size:"
-          du -sh media_asset.mp4
           echo "LAST_IDX=$INDEX" >> $GITHUB_ENV
 
       - name: Transmission start
         env:
           TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
         run: |
-          # Stream execution using standard parameters for stability
           ffmpeg -re -stream_loop -1 -i media_asset.mp4 \
           -c:v libx264 -preset veryfast -tune film \
           -b:v 4500k -maxrate 5000k -bufsize 10000k \
@@ -74,12 +61,11 @@ jobs:
       - name: System logging
         if: always()
         run: |
-          # Stealth bot configuration for repository state updates
           git config --global user.name "system-bot"
           git config --global user.email "bot@internal.com"
-          git pull origin main --rebase
+          git pull origin main --rebase || true
           echo "Sync: $(date)" > status.log
           echo "Active Index: ${{ env.LAST_IDX }}" >> status.log
           git add status.log
-          git commit -m "System state update $(date)" || exit 0
-          git push origin main
+          git commit -m "System state update $(date)" || true
+          git push origin main || true
