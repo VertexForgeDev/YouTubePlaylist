@@ -1,4 +1,4 @@
-name: Global Media Streamer
+name: Global Media Streamer - RNS
 
 on:
   workflow_dispatch:
