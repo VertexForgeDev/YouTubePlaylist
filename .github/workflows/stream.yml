@@ -9,7 +9,7 @@ on:
     - cron: '40 17 * * *'
 
 concurrency:
-  group: streamer-logic
+  group: youtube-live
   cancel-in-progress: true
 
 jobs:
@@ -38,20 +38,28 @@ jobs:
         env:
           DB_SOURCE: ${{ secrets.VIDEO_URLS }}
         run: |
+          # The -f flag prevents error if no mp4 files exist
           rm -f *.mp4 || true
+          
+          # Convert secret into array safely
           IFS=$'\n' read -rd '' -a VIDEOS <<< "$DB_SOURCE"
+          
           COUNT=${#VIDEOS[@]}
           SEED=$(($(date +%s%N) + RANDOM))
           INDEX=$(( SEED % COUNT ))
           SELECTED_URL=${VIDEOS[$INDEX]}
-          curl -L "$SELECTED_URL" -o "media_asset.mp4"
+          
+          # Internal asset naming
+          curl -L "$SELECTED_URL" -o "video_na_stream.mp4"
+          
+          du -sh video_na_stream.mp4
           echo "LAST_IDX=$INDEX" >> $GITHUB_ENV
 
       - name: Transmission start
         env:
           TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
         run: |
-          ffmpeg -re -stream_loop -1 -i media_asset.mp4 \
+          ffmpeg -re -stream_loop -1 -i video_na_stream.mp4 \
           -c:v libx264 -preset veryfast -tune film \
           -b:v 4500k -maxrate 5000k -bufsize 10000k \
           -pix_fmt yuv420p -g 60 -r 30 \
@@ -67,5 +75,5 @@ jobs:
           echo "Sync: $(date)" > status.log
           echo "Active Index: ${{ env.LAST_IDX }}" >> status.log
           git add status.log
-          git commit -m "System state update $(date)" || true
+          git commit -m "System state update $(date)" || exit 0
           git push origin main || true
