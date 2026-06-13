@@ -1,0 +1,85 @@
+name: Global Media Streamer - RNS
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '10 0 * * *'
+    - cron: '40 5 * * *'
+    - cron: '20 11 * * *'
+    - cron: '40 17 * * *'
+
+concurrency:
+  group: youtube-live
+  cancel-in-progress: true
+
+jobs:
+  core-process:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    permissions:
+      contents: write
+
+    steps:
+      - name: Initialize environment
+        uses: actions/checkout@v4
+
+      - name: Component installation
+        run: |
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Resource allocation (Download from Dropbox)
+        env:
+          DB_SOURCE: ${{ secrets.RAVION_URLS }}
+        run: |
+          set +e
+          rm -f *.mp4
+          if [ -z "$DB_SOURCE" ]; then echo "Error: RAVION_URLS is empty"; exit 1; fi
+          
+          # Logic to pick a random video from the list
+          VID_LIST=$(echo "$DB_SOURCE")
+          SELECTED_URL=$(echo "$VID_LIST" | shuf -n 1)
+          
+          # Format Dropbox URL to force direct download instead of loading the web preview
+          DOWNLOAD_URL=$(echo "$SELECTED_URL" | sed 's/dl=0/dl=1/g')
+          
+          echo "Downloading from: $DOWNLOAD_URL"
+          curl -L "$DOWNLOAD_URL" -o "video_na_stream.mp4"
+          
+          if [ ! -f "video_na_stream.mp4" ]; then 
+            echo "Download failed"
+            exit 1 
+          fi
+
+          # Verify it is not an HTML error page (Dropbox sometimes blocks automated requests if not formatted correctly)
+          FILE_SIZE=$(stat -c%s "video_na_stream.mp4")
+          if [ "$FILE_SIZE" -lt 10000 ]; then
+            echo "Error: Downloaded file is too small. Likely an HTML error page."
+            exit 1
+          fi
+
+          echo "LAST_IDX=999" >> $GITHUB_ENV
+          set -e
+
+      - name: Transmission start
+        env:
+          TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
+        run: |
+          # Stream the video to YouTube on an infinite loop (-stream_loop -1)
+          # Added -fflags +genpts to prevent YouTube from disconnecting when the video restarts
+          ffmpeg -re -stream_loop -1 -fflags +genpts -i video_na_stream.mp4 \
+          -c:v libx264 -preset veryfast -tune film \
+          -b:v 4500k -maxrate 5000k -bufsize 10000k \
+          -pix_fmt yuv420p -g 60 -r 30 \
+          -c:a aac -b:a 128k -ar 44100 \
+          -f flv "rtmp://a.rtmp.youtube.com/live2/$TARGET_KEY"
+
+      - name: System logging
+        if: always()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git pull origin main --rebase || true
+          echo "Sync: $(date)" > status.log
+          git add status.log
+          git commit -m "update $(date) [skip ci]" || true
+          git push origin main || true
