@@ -9,7 +9,7 @@ on:
     - cron: '40 17 * * *'
 
 concurrency:
-  group: youtube-live
+  group: youtube-live-rns
   cancel-in-progress: true
 
 jobs:
@@ -29,13 +29,13 @@ jobs:
 
       - name: Resource allocation (Download from Dropbox)
         env:
-          DB_SOURCE: ${{ secrets.RAVION_URLS }}
+          DB_SOURCE: ${{ secrets.VIDEO_URLS }}
         run: |
           set +e
           rm -f *.mp4
-          if [ -z "$DB_SOURCE" ]; then echo "Error: RAVION_URLS is empty"; exit 1; fi
+          if [ -z "$DB_SOURCE" ]; then echo "Error: VIDEO_URLS is empty"; exit 1; fi
           
-          # Logic to pick a random video from the list
+          # Select a random video from the list
           VID_LIST=$(echo "$DB_SOURCE")
           SELECTED_URL=$(echo "$VID_LIST" | shuf -n 1)
           
@@ -79,7 +79,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git pull origin main --rebase || true
-          echo "Sync: $(date)" > status.log
-          git add status.log
-          git commit -m "update $(date) [skip ci]" || true
+          echo "Sync RNS: $(date)" > last_run_rns.txt
+          git add last_run_rns.txt
+          git commit -m "update RNS $(date) [skip ci]" || true
           git push origin main || true
