@@ -35,11 +35,11 @@ jobs:
           rm -f *.mp4
           if [ -z "$DB_SOURCE" ]; then echo "Error: RAVION_URLS is empty"; exit 1; fi
           
-          # Výber náhodného videa zo zoznamu
+          # Select a random video from the list
           VID_LIST=$(echo "$DB_SOURCE")
           SELECTED_URL=$(echo "$VID_LIST" | shuf -n 1)
           
-          # Úprava Dropbox odkazu na vynútenie priameho sťahovania
+          # Format Dropbox URL to force direct download instead of loading the web preview
           DOWNLOAD_URL=$(echo "$SELECTED_URL" | sed 's/dl=0/dl=1/g')
           
           echo "Downloading from: $DOWNLOAD_URL"
@@ -50,10 +50,10 @@ jobs:
             exit 1 
           fi
 
-          # Kontrola veľkosti stiahnutého videa (či nejde o chybnú HTML stránku)
+          # Verify it is not an HTML error page (Dropbox sometimes blocks automated requests if not formatted correctly)
           FILE_SIZE=$(stat -c%s "video_na_stream.mp4")
           if [ "$FILE_SIZE" -lt 10000 ]; then
-            echo "Error: Stiahnutý súbor je príliš malý. Pravdepodobne zlyhal Dropbox link."
+            echo "Error: Downloaded file is too small. Likely an HTML error page."
             exit 1
           fi
 
@@ -64,8 +64,8 @@ jobs:
         env:
           TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY_3 }}
         run: |
-          # Streamovanie videa v nekonečnej slučke (-stream_loop -1)
-          # Pridané -fflags +genpts pre stabilné napojenie pri reštarte videa na YouTube
+          # Stream the video to YouTube on an infinite loop (-stream_loop -1)
+          # Added -fflags +genpts to prevent YouTube from disconnecting when the video restarts
           ffmpeg -re -stream_loop -1 -fflags +genpts -i video_na_stream.mp4 \
           -c:v libx264 -preset veryfast -tune film \
           -b:v 4500k -maxrate 5000k -bufsize 10000k \
