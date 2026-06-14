@@ -27,7 +27,7 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Resource allocation (Download from Dropbox)
+      - name: Resource allocation
         env:
           DB_SOURCE: ${{ secrets.VIDEO_URLS }}
         run: |
@@ -35,28 +35,14 @@ jobs:
           rm -f *.mp4
           if [ -z "$DB_SOURCE" ]; then echo "Error: VIDEO_URLS is empty"; exit 1; fi
           
-          # Select a random video from the list
+          # Tvoja povodna overena logika na nahodny vyber videa
           VID_LIST=$(echo "$DB_SOURCE")
           SELECTED_URL=$(echo "$VID_LIST" | shuf -n 1)
           
-          # Format Dropbox URL to force direct download instead of loading the web preview
-          DOWNLOAD_URL=$(echo "$SELECTED_URL" | sed 's/dl=0/dl=1/g')
+          echo "Downloading from: $SELECTED_URL"
+          curl -L "$SELECTED_URL" -o "video_na_stream.mp4"
           
-          echo "Downloading from: $DOWNLOAD_URL"
-          curl -L "$DOWNLOAD_URL" -o "video_na_stream.mp4"
-          
-          if [ ! -f "video_na_stream.mp4" ]; then 
-            echo "Download failed"
-            exit 1 
-          fi
-
-          # Verify it is not an HTML error page (Dropbox sometimes blocks automated requests if not formatted correctly)
-          FILE_SIZE=$(stat -c%s "video_na_stream.mp4")
-          if [ "$FILE_SIZE" -lt 10000 ]; then
-            echo "Error: Downloaded file is too small. Likely an HTML error page."
-            exit 1
-          fi
-
+          if [ ! -f "video_na_stream.mp4" ]; then echo "Download failed"; exit 1; fi
           echo "LAST_IDX=999" >> $GITHUB_ENV
           set -e
 
@@ -64,9 +50,7 @@ jobs:
         env:
           TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY }}
         run: |
-          # Stream the video to YouTube on an infinite loop (-stream_loop -1)
-          # Added -fflags +genpts to prevent YouTube from disconnecting when the video restarts
-          ffmpeg -re -stream_loop -1 -fflags +genpts -i video_na_stream.mp4 \
+          ffmpeg -re -stream_loop -1 -i video_na_stream.mp4 \
           -c:v libx264 -preset veryfast -tune film \
           -b:v 4500k -maxrate 5000k -bufsize 10000k \
           -pix_fmt yuv420p -g 60 -r 30 \
