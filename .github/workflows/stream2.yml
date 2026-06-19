@@ -3,7 +3,10 @@ name: Global Media Streamer - WOTL
 on:
   workflow_dispatch:
   schedule:
-    - cron: '43 19 * * *'
+    - cron: '13 1 * * *'   # Runs daily at 01:13 UTC
+    - cron: '37 7 * * *'   # Runs daily at 07:37 UTC
+    - cron: '23 13 * * *'  # Runs daily at 13:23 UTC
+    - cron: '47 19 * * *'  # Runs daily at 19:47 UTC
 
 concurrency:
   group: wotl-logic
@@ -17,19 +20,24 @@ jobs:
       contents: write
 
     steps:
-      - name: Authorization check
-        run: |
-          if [ "${{ github.repository_owner }}" != "jozmas" ]; then
-            exit 1
-          fi
-
+      # Step 1: Initialize environment (must be first to ensure we clone the git repository)
       - name: Initialize environment
         uses: actions/checkout@v4
 
+      # Step 2: Secure authorization check using native GitHub Actions condition.
+      # If the repository owner is not "jozmas", this step fails and halts the workflow.
+      - name: Authorization check
+        if: github.repository_owner != 'jozmas'
+        run: |
+          echo "Error: Unauthorized repository owner (${{ github.repository_owner }}). Exiting..."
+          exit 1
+
+      # Step 3: Install required components
       - name: Component installation
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg curl
 
+      # Step 4: Download video resource from Dropbox
       - name: Resource allocation (Download from Dropbox)
         env:
           DROPBOX_URL: ${{ secrets.YT_WOTL_KEY }}
@@ -59,6 +67,7 @@ jobs:
 
           set -e
 
+      # Step 5: Start streaming transmission to YouTube
       - name: Transmission start
         env:
           TARGET_KEY: ${{ secrets.YOUTUBE_STREAM_KEY_2 }}
@@ -78,13 +87,20 @@ jobs:
           -c:a aac -b:a 128k -ac 2 \
           -f flv "rtmp://a.rtmp.youtube.com/live2/$TARGET_KEY"
 
+      # Step 6: System logging and state backup
+      # Runs always, but safely checks for .git presence to avoid unnecessary build failures
       - name: System logging
         if: always()
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git pull origin main --rebase || true
-          echo "Sync State WOTL: $(date)" > last_run_wotl.txt
-          git add last_run_wotl.txt
-          git commit -m "sys-update: $(date) [skip ci]" || true
-          git push origin main || true
+          # Safeguard: only perform Git actions if the repository was successfully initialized
+          if [ -d ".git" ]; then
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git pull origin main --rebase || true
+            echo "Sync State WOTL: $(date)" > last_run_wotl.txt
+            git add last_run_wotl.txt
+            git commit -m "sys-update: $(date) [skip ci]" || true
+            git push origin main || true
+          else
+            echo "Git repository not initialized. Skipping logging step."
+          fi
