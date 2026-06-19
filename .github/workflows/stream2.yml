@@ -25,9 +25,9 @@ jobs:
         uses: actions/checkout@v4
 
       # Step 2: Secure authorization check using native GitHub Actions condition.
-      # If the repository owner is not "jozmas", this step fails and halts the workflow.
+      # This has been updated to authorize both "jozmas" and "VertexForgeDev".
       - name: Authorization check
-        if: github.repository_owner != 'jozmas'
+        if: github.repository_owner != 'jozmas' && github.repository_owner != 'VertexForgeDev'
         run: |
           echo "Error: Unauthorized repository owner (${{ github.repository_owner }}). Exiting..."
           exit 1
