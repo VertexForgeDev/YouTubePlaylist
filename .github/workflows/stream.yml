@@ -35,7 +35,7 @@ jobs:
           rm -f *.mp4
           if [ -z "$DB_SOURCE" ]; then echo "Error: VIDEO_URLS is empty"; exit 1; fi
           
-          # Tvoja povodna overena logika na nahodny vyber videa
+          # Choose random video
           VID_LIST=$(echo "$DB_SOURCE")
           SELECTED_URL=$(echo "$VID_LIST" | shuf -n 1)
           
